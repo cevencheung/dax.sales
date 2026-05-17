@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>DAX 点单登记</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'PingFang SC', sans-serif; background: #f0ece6; color: #1a1a1a; }
+
+  /* ── Header ── */
+  .header {
+    background: #1a1a1a; color: #fff;
+    padding: 14px 16px 10px;
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .header h1 { font-size: 17px; font-weight: 700; letter-spacing: .5px; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .shift-toggle {
+    display: flex; background: #333; border-radius: 20px; padding: 3px;
+  }
+  .shift-toggle button {
+    border: none; background: transparent; color: #aaa;
+    font-size: 12px; padding: 4px 10px; border-radius: 16px; cursor: pointer;
+    transition: all .2s;
+  }
+  .shift-toggle button.active { background: #c8a96e; color: #1a1a1a; font-weight: 700; }
+
+  .summary-btn {
+    background: #c8a96e; color: #1a1a1a;
+    border: none; border-radius: 20px;
+    font-size: 12px; font-weight: 700;
+    padding: 6px 12px; cursor: pointer;
+  }
+
+  /* ── Date bar ── */
+  .datebar {
+    background: #2e2e2e; color: #c8a96e;
+    text-align: center; font-size: 12px; padding: 5px;
+    letter-spacing: 1px;
+  }
+
+  /* ── Category sections ── */
+  .section { margin: 10px 10px 0; }
+  .section-title {
+    font-size: 11px; font-weight: 700; color: #fff;
+    background: #2e2e2e; padding: 5px 10px;
+    border-radius: 6px 6px 0 0; letter-spacing: 1px;
+  }
+  .products { background: #fff; border-radius: 0 0 8px 8px; overflow: hidden; }
+
+  /* ── Product row ── */
+  .product-row {
+    display: flex; align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0ece6;
+    gap: 8px;
+  }
+  .product-row:last-child { border-bottom: none; }
+  .product-name { flex: 1; font-size: 14px; }
+  .product-price { font-size: 11px; color: #888; width: 36px; text-align: right; }
+  .counter {
+    display: flex; align-items: center; gap: 0;
+  }
+  .counter button {
+    width: 32px; height: 32px; border: none; cursor: pointer;
+    font-size: 18px; font-weight: 300; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .1s;
+  }
+  .counter button:active { transform: scale(.88); }
+  .btn-minus { background: #f0ece6; color: #666; }
+  .btn-plus  { background: #1a1a1a; color: #fff; }
+  .count-display {
+    width: 32px; text-align: center; font-size: 16px; font-weight: 700;
+  }
+  .count-display.nonzero { color: #c8a96e; }
+
+  /* ── Bottom spacer ── */
+  .bottom-space { height: 80px; }
+
+  /* ── Total bar ── */
+  .total-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #1a1a1a; color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px 14px;
+    box-shadow: 0 -2px 12px rgba(0,0,0,.15);
+  }
+  .total-info { font-size: 13px; }
+  .total-info span { color: #c8a96e; font-weight: 700; font-size: 16px; }
+  .total-cups { font-size: 11px; color: #888; margin-top: 2px; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.6); z-index: 200;
+    align-items: flex-end;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff; width: 100%; border-radius: 20px 20px 0 0;
+    padding: 20px 16px 32px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .modal-title { font-size: 17px; font-weight: 700; }
+  .modal-close {
+    background: #f0ece6; border: none; border-radius: 50%;
+    width: 30px; height: 30px; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* summary table */
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .summary-table th {
+    background: #1a1a1a; color: #fff; padding: 8px 10px;
+    text-align: center; font-weight: 600;
+  }
+  .summary-table th:first-child { text-align: left; }
+  .summary-table td { padding: 8px 10px; border-bottom: 1px solid #f0ece6; }
+  .summary-table td:not(:first-child) { text-align: center; }
+  .summary-table tr.cat-header td {
+    background: #2e2e2e; color: #c8a96e;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    padding: 5px 10px;
+  }
+  .summary-table tr.total-row td {
+    background: #ffd700; font-weight: 700;
+  }
+  .summary-table .zero { color: #ccc; }
+  .summary-table .nonzero { color: #1a1a1a; font-weight: 700; }
+
+  .copy-area {
+    margin-top: 16px; background: #f8f6f2; border-radius: 10px;
+    padding: 12px; font-size: 12px; color: #555; font-family: monospace;
+    white-space: pre; overflow-x: auto;
+    border: 1px dashed #c8a96e;
+  }
+  .copy-btn {
+    width: 100%; margin-top: 12px;
+    background: #1a1a1a; color: #fff;
+    border: none; border-radius: 12px;
+    padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .copy-btn:active { background: #333; }
+  .reset-btn {
+    width: 100%; margin-top: 8px;
+    background: #f0ece6; color: #888;
+    border: none; border-radius: 12px;
+    padding: 12px; font-size: 14px; cursor: pointer;
+  }
+
+  .copied-toast {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: rgba(0,0,0,.8); color: #fff;
+    padding: 12px 24px; border-radius: 30px; font-size: 14px;
+    z-index: 300; display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>☕ DAX 点单登记</h1>
+  <div class="header-right">
+    <div class="shift-toggle">
+      <button id="btn-am" class="active" onclick="setShift('am')">上午</button>
+      <button id="btn-pm" onclick="setShift('pm')">下午</button>
+    </div>
+    <button class="summary-btn" onclick="openSummary()">汇总 →</button>
+  </div>
+</div>
+
+<div class="datebar" id="datebar"></div>
+
+<div id="product-list"></div>
+<div class="bottom-space"></div>
+
+<div class="total-bar">
+  <div class="total-info">
+    今日营业额 <span id="total-revenue">¥0</span>
+    <div class="total-cups" id="total-cups">共 0 杯</div>
+  </div>
+  <div style="font-size:12px;color:#888;text-align:right;">
+    <div id="shift-am-info">上午 0 杯</div>
+    <div id="shift-pm-info">下午 0 杯</div>
+  </div>
+</div>
+
+<!-- Summary Modal -->
+<div class="modal-overlay" id="modal" onclick="closeOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">📋 今日汇总</div>
+      <button class="modal-close" onclick="closeSummary()">✕</button>
+    </div>
+    <div id="summary-content"></div>
+    <div style="margin-top:14px;font-size:12px;color:#888;font-weight:600;">📌 Excel 录入数据（上午 | 下午）</div>
+    <div class="copy-area" id="copy-text"></div>
+    <button class="copy-btn" onclick="copyData()">📋 复制数据</button>
+    <button class="reset-btn" onclick="resetDay()">🗑 清空今日数据</button>
+  </div>
+</div>
+
+<div class="copied-toast" id="toast">已复制！</div>
+
+<script>
+// ── 产品数据 ──
+const PRODUCTS = [
+  { cat: "Americano",      name: "拼配美式",            price: 16   },
+  { cat: "",               name: "SOE美式",              price: 19   },
+  { cat: "",               name: "+1 Shot",               price: 5    },
+  { cat: "White",          name: "Latte 拿铁",           price: 23   },
+  { cat: "",               name: "Cappuccino 卡布奇诺",  price: 23   },
+  { cat: "",               name: "Flat White 澳白",      price: 18   },
+  { cat: "",               name: "Mocha 摩卡",           price: 25   },
+  { cat: "",               name: "桂花拿铁",             price: 25   },
+  { cat: "",               name: "卡美罗拿铁",           price: 25   },
+  { cat: "",               name: "SOE拿铁",              price: 26   },
+  { cat: "Coffee Special", name: "柠咖",                 price: 21   },
+  { cat: "",               name: "阿婆美式",             price: 28   },
+  { cat: "No Coffee",      name: "柠檬茶",               price: 16   },
+  { cat: "",               name: "抹茶拿铁",             price: 25   },
+  { cat: "",               name: "黑加仑苏打",           price: 22   },
+  { cat: "",               name: "阿婆长汽",             price: 25   },
+  { cat: "",               name: "鲜榨苹果汁",           price: 25   },
+  { cat: "精品手冲",       name: "洪都拉斯 · 雪莉",     price: 30   },
+  { cat: "",               name: "哥伦比亚 · 花月夜",   price: 33   },
+  { cat: "",               name: "埃塞 · 花魁 G1",      price: 32   },
+  { cat: "",               name: "埃塞 · 班莎G1",       price: 33   },
+  { cat: "",               name: "埃塞 · 白桃乌龙",     price: 36   },
+  { cat: "",               name: "巴拿马 · 瑰夏",       price: 58   },
+  { cat: "早餐套餐",       name: "牛角包+美式",         price: 22.8 },
+  { cat: "",               name: "牛角包+拿铁",         price: 28.8 },
+  { cat: "VIP",            name: "拼配美式",             price: 12.9 },
+  { cat: "",               name: "SOE美式",              price: 15.9 },
+  { cat: "",               name: "拿铁",                 price: 19.6 },
+];
+
+// ── 本地存储 ──
+const STORAGE_KEY = 'dax_sales';
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    // 如果不是今天的数据，自动清空
+    if (saved.date !== todayStr()) return null;
+    return saved;
+  } catch(e) { return null; }
+}
+
+function saveData() {
+  const data = { date: todayStr(), shift, counts };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// ── 状态：从本地存储恢复，否则初始化 ──
+const saved = loadData();
+let shift  = saved ? saved.shift  : 'am';
+let counts = saved ? saved.counts : PRODUCTS.map(() => ({ am: 0, pm: 0 }));
+
+// ── 日期 ──
+function getToday() {
+  const d = new Date();
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${['日','一','二','三','四','五','六'][d.getDay()]}`;
+}
+document.getElementById('datebar').textContent = getToday();
+
+// ── 渲染产品列表 ──
+function render() {
+  const list = document.getElementById('product-list');
+  let html = '';
+  let currentCat = null;
+
+  PRODUCTS.forEach((p, i) => {
+    if (p.cat && p.cat !== currentCat) {
+      if (currentCat !== null) html += `</div></div>`;
+      currentCat = p.cat;
+      html += `<div class="section"><div class="section-title">${p.cat}</div><div class="products">`;
+    } else if (!p.cat && currentCat === null) {
+      html += `<div class="section"><div class="section-title">其他</div><div class="products">`;
+      currentCat = '其他';
+    }
+    const total = counts[i].am + counts[i].pm;
+    const cur = counts[i][shift];
+    html += `
+      <div class="product-row">
+        <div class="product-name">${p.name}</div>
+        <div class="product-price">¥${p.price}</div>
+        <div class="counter">
+          <button class="btn-minus" onclick="change(${i},-1)">−</button>
+          <div class="count-display ${total>0?'nonzero':''}">${total||'0'}</div>
+          <button class="btn-plus" onclick="change(${i},1)">+</button>
+        </div>
+      </div>`;
+  });
+  if (currentCat !== null) html += `</div></div>`;
+  list.innerHTML = html;
+  updateTotals();
+}
+
+function change(i, delta) {
+  const newVal = counts[i][shift] + delta;
+  if (newVal < 0) return;
+  counts[i][shift] = newVal;
+  saveData();
+  render();
+}
+
+function setShift(s) {
+  shift = s;
+  document.getElementById('btn-am').classList.toggle('active', s==='am');
+  document.getElementById('btn-pm').classList.toggle('active', s==='pm');
+  saveData();
+  render();
+}
+
+function updateTotals() {
+  let totalRev = 0, totalCups = 0, amCups = 0, pmCups = 0;
+  PRODUCTS.forEach((p, i) => {
+    const am = counts[i].am, pm = counts[i].pm;
+    totalRev += (am + pm) * p.price;
+    totalCups += am + pm;
+    amCups += am; pmCups += pm;
+  });
+  document.getElementById('total-revenue').textContent = `¥${totalRev.toFixed(0)}`;
+  document.getElementById('total-cups').textContent = `共 ${totalCups} 杯`;
+  document.getElementById('shift-am-info').textContent = `上午 ${amCups} 杯`;
+  document.getElementById('shift-pm-info').textContent = `下午 ${pmCups} 杯`;
+}
+
+// ── 汇总弹窗 ──
+function openSummary() {
+  // Build summary table
+  let html = `<table class="summary-table">
+    <thead><tr>
+      <th>产品</th><th>上午</th><th>下午</th><th>合计</th><th>营业额</th>
+    </tr></thead><tbody>`;
+
+  let currentCat = null;
+  let grandAm = 0, grandPm = 0, grandTotal = 0, grandRev = 0;
+
+  PRODUCTS.forEach((p, i) => {
+    if (p.cat && p.cat !== currentCat) {
+      currentCat = p.cat;
+      html += `<tr class="cat-header"><td colspan="5">${p.cat}</td></tr>`;
+    }
+    const am = counts[i].am, pm = counts[i].pm, tot = am + pm;
+    const rev = tot * p.price;
+    grandAm += am; grandPm += pm; grandTotal += tot; grandRev += rev;
+    const cls = tot > 0 ? 'nonzero' : 'zero';
+    html += `<tr>
+      <td>${p.name}</td>
+      <td class="${cls}">${am||'—'}</td>
+      <td class="${cls}">${pm||'—'}</td>
+      <td class="${cls}">${tot||'—'}</td>
+      <td class="${cls}">${tot>0?'¥'+rev.toFixed(0):'—'}</td>
+    </tr>`;
+  });
+
+  html += `<tr class="total-row">
+    <td>合计</td>
+    <td>${grandAm}</td><td>${grandPm}</td>
+    <td>${grandTotal} 杯</td>
+    <td>¥${grandRev.toFixed(0)}</td>
+  </tr></tbody></table>`;
+
+  document.getElementById('summary-content').innerHTML = html;
+
+  // Build copy text (tab-separated for Excel: 产品 | 上午 | 下午)
+  let copyLines = ['产品\t上午\t下午'];
+  PRODUCTS.forEach((p, i) => {
+    copyLines.push(`${p.name}\t${counts[i].am}\t${counts[i].pm}`);
+  });
+  document.getElementById('copy-text').textContent = copyLines.join('\n');
+
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeSummary() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+function closeOnOverlay(e) {
+  if (e.target === document.getElementById('modal')) closeSummary();
+}
+
+function copyData() {
+  const text = document.getElementById('copy-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 1800);
+  });
+}
+
+function resetDay() {
+  if (!confirm('确定清空今日所有数据？')) return;
+  counts = PRODUCTS.map(() => ({ am: 0, pm: 0 }));
+  shift = 'am';
+  localStorage.removeItem(STORAGE_KEY);
+  closeSummary();
+  document.getElementById('btn-am').classList.add('active');
+  document.getElementById('btn-pm').classList.remove('active');
+  render();
+}
+
+// 恢复 shift 按钮状态
+document.getElementById('btn-am').classList.toggle('active', shift==='am');
+document.getElementById('btn-pm').classList.toggle('active', shift==='pm');
+
+render();
+</script>
+</body>
+</html>
